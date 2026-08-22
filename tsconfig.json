@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  // `@oh-my-pi/*` are symlinked from the installed omp by `vp run link:omp`
+  // (see scripts/link-omp.ts) rather than vendored, so typecheck and tests
+  // resolve exactly the code the omp runtime will load.
+  "include": ["src", "test", "scripts"]
+}
