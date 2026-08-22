@@ -26,6 +26,36 @@ So **plaintext exists in two places per request**, and the guarantees there are 
 
 Use this because you want the edge out of the path, or on principle. Not because it makes Darkbloom blind.
 
+## Hard-pin to one owned Mac
+
+Darkbloom already implements the routing primitive. In upstream
+`Layr-Labs/d-inference` commit `232911ca690b78cbd3c8f65668d69f75a8f6bef0`:
+
+- request fields `provider_serial` / `provider_serials` are parsed after the
+  NaCl body is opened, then stripped before forwarding;
+- `AllowedProviderSerials` excludes every provider whose attested Apple serial
+  is not in the allowlist, including cold-load and retry paths.
+
+Configure one stable hardware identity:
+
+```bash
+export DARKBLOOM_PROVIDER_SERIAL='<Apple hardware serial>'
+export DARKBLOOM_PROVIDER_SE_PUBLIC_KEY='<base64 Secure Enclave public key>'
+```
+
+Both values are required together. In pin mode this extension:
+
+1. inserts `provider_serial` **inside the sealed JSON body**;
+2. rejects caller-supplied provider routing fields;
+3. rejects a successful response unless it reports `hardware` trust, Secure
+   Enclave, and the exact pinned `x-attestation-se-public-key`;
+4. rejects an unsealed successful response, buffered or streaming.
+
+This does not change the coordinator boundary described above: plaintext still
+exists transiently inside Darkbloom's coordinator CVM. It removes random
+provider Macs from the path and makes the only provider plaintext endpoint the
+specific Mac you own.
+
 ## Design
 
 Sealing is a transport concern, so it is applied as a `fetch` wrapper rather than a bespoke provider. `streamSimple` delegates to omp's own `openai-completions` implementation with `options.fetch` swapped:
@@ -51,7 +81,7 @@ ln -s "$PWD" ~/.omp/agent/extensions/omp-darkbloom-sealed
 omp models refresh     # required, see below
 ```
 
-Key resolution: `DARKBLOOM_API_KEY`, else `DARKBLOOM_KEY_FILE`, else `~/.darkbloom-key`. Override the origin with `DARKBLOOM_BASE_URL`.
+Key resolution: `DARKBLOOM_API_KEY`, else `DARKBLOOM_KEY_FILE`, else `~/.darkbloom-key`. Override the origin with `DARKBLOOM_BASE_URL`. Optional hard-pin variables are `DARKBLOOM_PROVIDER_SERIAL` + `DARKBLOOM_PROVIDER_SE_PUBLIC_KEY`; one without the other aborts provider registration.
 
 ```
 /darkbloom-sealing     # which coordinator kid is in use
@@ -65,12 +95,16 @@ Key resolution: `DARKBLOOM_API_KEY`, else `DARKBLOOM_KEY_FILE`, else `~/.darkblo
 | Sealed non-streaming | HTTP 200, 745 ms, unsealed and parsed |
 | Sealed SSE | 35 frames unsealed, content assembled correctly |
 | Provider attestation | `Apple M4 Max` / `M3 Ultra`, `trust_level: hardware` |
+| Response identity header | `x-attestation-se-public-key` present on live buffered and SSE successes |
 | omp registration | `darkbloom-sealed (3)` |
 | Agentic tool call | `read probe.txt` → correct contents returned |
+| Pinned routing (live) | Request with the pinned Mac's attested serial returned a sealed 429 while it had no warm model; it did **not** fall back to 126 public GPT-OSS providers |
+| Pinned identity (unit) | Hardware trust + Secure Enclave + exact SE public key required before any successful body is exposed |
+| Downgrade controls | Plaintext buffered 2xx and plaintext SSE both rejected; sealed 429 errors unsealed correctly |
 
 ## Fails closed
 
-If the coordinator key cannot be fetched, the request **throws** rather than falling back to plaintext — the caller asked for sealing, so silently downgrading would be the one unacceptable outcome. A tampered or wrongly-keyed payload throws for the same reason. `GET`s (model discovery) pass through unsealed by design.
+If the coordinator key cannot be fetched, the request **throws** rather than falling back to plaintext. A tampered or wrongly-keyed payload throws. Every successful POST must return sealed ciphertext; plaintext 2xx is rejected. Routing errors may be sealed or plaintext depending on whether rejection happened before or after envelope decryption; sealed errors are unsealed, never exposed as ciphertext. In hard-pin mode, missing/mismatched hardware trust, Secure Enclave status, or SE public key also terminates the turn before response content is exposed. `GET`s (model discovery) pass through unsealed by design.
 
 ## Two traps worth knowing
 
@@ -78,7 +112,6 @@ If the coordinator key cannot be fetched, the request **throws** rather than fal
 
 **Empty discovery is cached.** omp caches `fetchDynamicModels` in SQLite with a 24 h TTL, so the zero-model result above persisted after the fix until `omp models refresh`.
 
-**`compat` must be an object.** A delegated model built with `{...model, api: "openai-completions"}` leaves `compat` undefined, and the completions path reads fields off it directly (`baseCompat.disableReasoningOnForcedToolChoice`) and throws.
 
 ## Models
 
@@ -92,10 +125,22 @@ Discovered live, gated on `metadata.can_accept`, priced from the entry's own per
 
 The ceiling is the catch: 35B MoE with 3B active. The docs' Qwen3.5 122B and MiniMax M2.5 239B tiers are not online. Good as a cheap, fast, high-volume rung; not a primary agentic coding model.
 
+Discovery remains fleet-wide because `/v1/models` advertises public aliases,
+while a provider registers concrete weight builds. The pin is enforced at
+dispatch. Selecting a model absent from the pinned Mac therefore fails closed;
+it never falls back to another provider.
+
 ## Verify
 
 ```bash
 vp run typecheck
-vp test              # 10 tests
+vp run test          # Bun unit tests
 vp run smoke         # live sealed round trip
 ```
+
+The live pinned smoke currently stops at the expected no-fallback edge: the Mac was
+online and hardware-trusted but reported `Warm models: none loaded` while its
+MLX challenge occupied the machine, so the coordinator returned a sealed 429.
+A successful pinned completion and its real response identity headers remain to
+be re-run when the Mac has a warm model; the routing pin itself is already proven by
+the refusal to use the public fleet.

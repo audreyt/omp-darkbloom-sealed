@@ -23,7 +23,7 @@ import type {
 	SimpleStreamOptions,
 } from "@oh-my-pi/pi-ai";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { createSealedFetch } from "./fetch";
+import { createSealedFetch, type ProviderPin } from "./fetch";
 import { CoordinatorKeyStore } from "./sealed";
 
 const PROVIDER_ID = "darkbloom-sealed";
@@ -32,6 +32,8 @@ const DEFAULT_BASE_URL = "https://api.darkbloom.dev";
 const ENV_API_KEY = "DARKBLOOM_API_KEY";
 const ENV_KEY_FILE = "DARKBLOOM_KEY_FILE";
 const ENV_BASE_URL = "DARKBLOOM_BASE_URL";
+const ENV_PROVIDER_SERIAL = "DARKBLOOM_PROVIDER_SERIAL";
+const ENV_PROVIDER_SE_PUBLIC_KEY = "DARKBLOOM_PROVIDER_SE_PUBLIC_KEY";
 
 interface DarkbloomModel {
 	id: string;
@@ -119,6 +121,28 @@ async function resolveApiKey(): Promise<string | undefined> {
 	return (await file.text()).trim();
 }
 
+export function resolveProviderPin(
+	env: Record<string, string | undefined> = process.env,
+): ProviderPin | undefined {
+	const serial = env[ENV_PROVIDER_SERIAL]?.trim();
+	const sePublicKey = env[ENV_PROVIDER_SE_PUBLIC_KEY]?.trim();
+	if (!serial && !sePublicKey) return undefined;
+	if (!serial || !sePublicKey) {
+		throw new Error(
+			`darkbloom-sealed: ${ENV_PROVIDER_SERIAL} and ${ENV_PROVIDER_SE_PUBLIC_KEY} must be configured together`,
+		);
+	}
+	if (!/^[A-Z0-9]{8,32}$/.test(serial)) {
+		throw new Error(`darkbloom-sealed: invalid ${ENV_PROVIDER_SERIAL}`);
+	}
+	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(sePublicKey) || Buffer.from(sePublicKey, "base64").length !== 64) {
+		throw new Error(
+			`darkbloom-sealed: ${ENV_PROVIDER_SE_PUBLIC_KEY} must be a base64 64-byte P-256 x||y public key`,
+		);
+	}
+	return { serial, sePublicKey };
+}
+
 export default async function darkbloomSealed(pi: ExtensionAPI): Promise<void> {
 	const apiKey = await resolveApiKey();
 	if (!apiKey) {
@@ -126,8 +150,9 @@ export default async function darkbloomSealed(pi: ExtensionAPI): Promise<void> {
 		return;
 	}
 	const baseUrl = process.env[ENV_BASE_URL]?.trim() ?? DEFAULT_BASE_URL;
+	const providerPin = resolveProviderPin();
 	const store = new CoordinatorKeyStore();
-	const sealedFetch = createSealedFetch({ baseUrl, store });
+	const sealedFetch = createSealedFetch({ baseUrl, store, providerPin });
 
 	pi.registerProvider(PROVIDER_ID, {
 		baseUrl: `${baseUrl}/v1`,
@@ -158,7 +183,9 @@ export default async function darkbloomSealed(pi: ExtensionAPI): Promise<void> {
 			const models = await fetchDarkbloomModels(baseUrl, resolved ?? apiKey);
 			return models.map((m) => ({
 				id: m.id,
-				name: m.name,
+				name: providerPin
+					? `${m.name.replace(/ \(Darkbloom sealed\)$/, "")} (Darkbloom sealed, pinned)`
+					: m.name,
 				api: API_ID,
 				reasoning: true,
 				input: m.image ? ["text", "image"] : ["text"],
@@ -175,7 +202,9 @@ export default async function darkbloomSealed(pi: ExtensionAPI): Promise<void> {
 			try {
 				const key = await store.get(baseUrl);
 				ctx.ui.notify(
-					`sealing to kid=${key.kid} alg=${key.algorithm} at ${baseUrl} — coordinator and provider still decrypt`,
+					providerPin
+						? `sealing to kid=${key.kid} alg=${key.algorithm} at ${baseUrl}; hard-pinned to serial=${providerPin.serial}, hardware SE identity enforced`
+						: `sealing to kid=${key.kid} alg=${key.algorithm} at ${baseUrl} — coordinator and provider still decrypt`,
 					"info",
 				);
 			} catch (error) {

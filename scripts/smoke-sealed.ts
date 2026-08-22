@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createSealedFetch } from "../src/fetch";
 import { CoordinatorKeyStore } from "../src/sealed";
+import { resolveProviderPin } from "../src/index";
 
 const BASE_URL = process.env.DARKBLOOM_BASE_URL?.trim() ?? "https://api.darkbloom.dev";
 
@@ -26,12 +27,18 @@ const model = argv.includes("--model") ? String(argv[argv.indexOf("--model") + 1
 
 const apiKey = await resolveApiKey();
 const store = new CoordinatorKeyStore();
+const providerPin = resolveProviderPin();
 const key = await store.get(BASE_URL);
 console.log(`coordinator: kid=${key.kid} alg=${key.algorithm} at ${BASE_URL}`);
 console.log(`model:       ${model}`);
-console.log("note:        the coordinator and provider still decrypt; this seals the edge only\n");
+console.log(
+	providerPin
+		? `note:        coordinator CVM decrypts; provider is hard-pinned to serial=${providerPin.serial}, no public fallback`
+		: "note:        coordinator and provider still decrypt; this seals the edge only",
+);
+console.log("");
 
-const sealedFetch = createSealedFetch({ baseUrl: BASE_URL, store });
+const sealedFetch = createSealedFetch({ baseUrl: BASE_URL, store, providerPin });
 const headers = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
 
 const describeProvider = (response: Response): string =>
@@ -41,9 +48,33 @@ const describeProvider = (response: Response): string =>
 		`trust=${response.headers.get("x-provider-trust-level")}`,
 		`enclave=${response.headers.get("x-provider-secure-enclave")}`,
 		`encrypted=${response.headers.get("x-provider-encrypted")}`,
+		`sekey=${response.headers.has("x-attestation-se-public-key") ? "present" : "missing"}`,
 	]
 		.filter(Boolean)
 		.join(" ");
+
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	return value as Record<string, unknown>;
+}
+
+function completionContent(value: unknown): string {
+	const root = recordOf(value);
+	const choices = root?.choices;
+	if (!Array.isArray(choices)) return "";
+	const first = recordOf(choices[0]);
+	const message = recordOf(first?.message);
+	return typeof message?.content === "string" ? message.content : "";
+}
+
+function streamDelta(value: unknown): string {
+	const root = recordOf(value);
+	const choices = root?.choices;
+	if (!Array.isArray(choices)) return "";
+	const first = recordOf(choices[0]);
+	const delta = recordOf(first?.delta);
+	return typeof delta?.content === "string" ? delta.content : "";
+}
 
 // --- buffered ---------------------------------------------------------------
 {
@@ -57,14 +88,18 @@ const describeProvider = (response: Response): string =>
 			max_tokens: 200,
 		}),
 	});
-	const payload = (await response.json()) as {
-		choices?: Array<{ message?: { content?: string } }>;
-		usage?: Record<string, unknown>;
-	};
+	const text = await response.text();
 	console.log(`buffered: http=${response.status} ${Date.now() - started}ms`);
 	console.log(`  provider: ${describeProvider(response)}`);
-	console.log(`  content:  ${JSON.stringify(payload.choices?.[0]?.message?.content ?? "")}`);
-	console.log(`  usage:    ${JSON.stringify(payload.usage ?? {})}\n`);
+	if (!response.ok) {
+		console.log(`  error:     ${text.slice(0, 500)}\n`);
+		process.exitCode = 1;
+	} else {
+		const payload: unknown = JSON.parse(text);
+		const root = recordOf(payload);
+		console.log(`  content:  ${JSON.stringify(completionContent(payload))}`);
+		console.log(`  usage:    ${JSON.stringify(root?.usage ?? {})}\n`);
+	}
 }
 
 // --- streaming --------------------------------------------------------------
@@ -87,8 +122,7 @@ const describeProvider = (response: Response): string =>
 		const data = frame.replace(/^data: /, "");
 		if (data === "[DONE]") continue;
 		try {
-			content += (JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> })
-				.choices?.[0]?.delta?.content ?? "";
+			content += streamDelta(JSON.parse(data));
 		} catch {
 			// A frame that is not JSON after unsealing is a protocol change worth
 			// seeing rather than swallowing silently.
@@ -99,4 +133,8 @@ const describeProvider = (response: Response): string =>
 	console.log(`  provider: ${describeProvider(response)}`);
 	console.log(`  frames:   ${frames.length} unsealed`);
 	console.log(`  content:  ${JSON.stringify(content)}`);
+	if (!response.ok) {
+		console.log(`  error:     ${text.slice(0, 500)}`);
+		process.exitCode = 1;
+	}
 }

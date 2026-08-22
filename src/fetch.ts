@@ -22,12 +22,25 @@ import {
 const SSE_CONTENT_TYPE = "text/event-stream";
 const JSON_CONTENT_TYPE = "application/json";
 
+
+export interface ProviderPin {
+	/** Stable hardware serial from Darkbloom's attestation record. */
+	serial: string;
+	/** Expected Apple Secure Enclave public key (base64), pinned out of band. */
+	sePublicKey: string;
+}
 export interface SealedFetchOptions {
 	/** Coordinator origin, e.g. `https://api.darkbloom.dev`. */
 	baseUrl: string;
 	store?: CoordinatorKeyStore;
 	/** Underlying transport; injectable for tests. */
 	fetchImpl?: typeof fetch;
+	/**
+	 * Hard pin to one owned provider. Adds provider_serial inside the sealed JSON,
+	 * forces X-Darkbloom-Route:self, and rejects a successful response unless its
+	 * attested Secure Enclave public key matches.
+	 */
+	providerPin?: ProviderPin;
 }
 
 /**
@@ -99,6 +112,54 @@ function unsealSseStream(
 	);
 }
 
+function addProviderPin(plaintextBody: string, pin: ProviderPin): string {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(plaintextBody);
+	} catch (error) {
+		throw new Error(
+			`darkbloom-sealed: pinned request body must be JSON — ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new Error("darkbloom-sealed: pinned request body must be a JSON object");
+	}
+	const body = parsed as Record<string, unknown>;
+	if ("provider_serial" in body || "provider_serials" in body) {
+		throw new Error(
+			"darkbloom-sealed: request already contains provider routing fields; the configured pin is authoritative",
+		);
+	}
+	body.provider_serial = pin.serial;
+	return JSON.stringify(body);
+}
+
+function verifyPinnedProvider(headers: Headers, pin: ProviderPin): void {
+	const trust = headers.get("x-provider-trust-level")?.trim().toLowerCase();
+	const enclave = headers.get("x-provider-secure-enclave")?.trim().toLowerCase();
+	const actualKey = headers.get("x-attestation-se-public-key")?.trim();
+	if (trust !== "hardware") {
+		throw new Error(
+			`darkbloom-sealed: pinned provider ${pin.serial} did not return hardware trust`,
+		);
+	}
+	if (enclave !== "true") {
+		throw new Error(
+			`darkbloom-sealed: pinned provider ${pin.serial} did not attest Secure Enclave`,
+		);
+	}
+	if (!actualKey) {
+		throw new Error(
+			`darkbloom-sealed: pinned provider ${pin.serial} omitted x-attestation-se-public-key`,
+		);
+	}
+	if (actualKey !== pin.sePublicKey) {
+		throw new Error(
+			`darkbloom-sealed: pinned provider ${pin.serial} Secure Enclave key mismatch`,
+		);
+	}
+}
+
 export function createSealedFetch(options: SealedFetchOptions): FetchImpl {
 	const doFetch: FetchImpl = options.fetchImpl ?? fetch;
 	// The store must share this transport, or an injected fetch (tests, proxies)
@@ -112,6 +173,10 @@ export function createSealedFetch(options: SealedFetchOptions): FetchImpl {
 
 		const plaintextBody = await request.text();
 		if (plaintextBody.length === 0) return doFetch(input, init);
+		const providerPin = options.providerPin;
+		const routedBody = providerPin
+			? addProviderPin(plaintextBody, providerPin)
+			: plaintextBody;
 
 		let coordKey: CoordinatorKey;
 		try {
@@ -124,10 +189,9 @@ export function createSealedFetch(options: SealedFetchOptions): FetchImpl {
 			);
 		}
 
-		const sealed = sealRawRequest(encodeUtf8(plaintextBody), coordKey);
+		const sealed = sealRawRequest(encodeUtf8(routedBody), coordKey);
 		const headers = new Headers(request.headers);
 		headers.set("Content-Type", SEALED_CONTENT_TYPE);
-		headers.delete("Content-Length");
 
 		const response = await doFetch(request.url, {
 			method: "POST",
@@ -136,21 +200,46 @@ export function createSealedFetch(options: SealedFetchOptions): FetchImpl {
 			...(request.signal ? { signal: request.signal } : {}),
 		});
 
+		if (response.ok && providerPin) {
+			try {
+				verifyPinnedProvider(response.headers, providerPin);
+			} catch (error) {
+				void response.body?.cancel();
+				throw error;
+			}
+		}
+
 		const responseType = response.headers.get("content-type") ?? "";
 		const outHeaders = new Headers(response.headers);
 
 		if (!response.ok) {
-			// Errors come back unsealed; hand them through so omp can classify.
-			if (response.status === 400 && responseType.includes("json")) {
-				const text = await response.text();
-				if (text.includes("kid_mismatch")) store.clear();
-				return new Response(text, {
+			// Pre-decryption transport errors (bad envelope/kid) are plaintext;
+			// downstream routing/admission errors are written through the sealing
+			// response writer and arrive as buffered ciphertext. Preserve both.
+			const text = await response.text();
+			if (response.status === 400 && text.includes("kid_mismatch")) store.clear();
+			if (text.includes('"ciphertext"')) {
+				let body: string;
+				try {
+					body = unsealResponse(text, sealed.ephemeralPrivateKey, coordKey.publicKey);
+				} catch (error) {
+					throw new Error(
+						`darkbloom-sealed: error response advertised ciphertext but failed to unseal — ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+				outHeaders.set("Content-Type", JSON_CONTENT_TYPE);
+				outHeaders.delete("Content-Length");
+				return new Response(body, {
 					status: response.status,
 					statusText: response.statusText,
 					headers: outHeaders,
 				});
 			}
-			return response;
+			return new Response(text, {
+				status: response.status,
+				statusText: response.statusText,
+				headers: outHeaders,
+			});
 		}
 
 		if (responseType.includes(SSE_CONTENT_TYPE)) {
@@ -164,12 +253,16 @@ export function createSealedFetch(options: SealedFetchOptions): FetchImpl {
 		}
 
 		const raw = await response.text();
-		// A coordinator without sealing configured answers plaintext JSON; only
-		// unseal what actually looks like an envelope.
-		const looksSealed = raw.includes('"ciphertext"');
-		const body = looksSealed
-			? unsealResponse(raw, sealed.ephemeralPrivateKey, coordKey.publicKey)
-			: raw;
+		let body: string;
+		try {
+			// A sealed request requires a sealed successful response. Accepting a
+			// plaintext 2xx silently downgrades the caller's confidentiality claim.
+			body = unsealResponse(raw, sealed.ephemeralPrivateKey, coordKey.publicKey);
+		} catch (error) {
+			throw new Error(
+				`darkbloom-sealed: successful buffered response was not valid sealed ciphertext — ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 		outHeaders.set("Content-Type", JSON_CONTENT_TYPE);
 		outHeaders.delete("Content-Length");
 		return new Response(body, {

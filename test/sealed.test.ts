@@ -50,15 +50,37 @@ function fakeCoordinator() {
 	return { key, pair, open, seal };
 }
 
+function parseJsonObject(text: string): Record<string, unknown> {
+	const parsed: unknown = JSON.parse(text);
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new Error("expected a JSON object");
+	}
+	return parsed as Record<string, unknown>;
+}
+
+function clientPublicKeyFromEnvelope(envelopeJson: string): Uint8Array {
+	const envelope = parseJsonObject(envelopeJson);
+	const value = envelope.ephemeral_public_key;
+	if (typeof value !== "string") {
+		throw new Error("envelope missing ephemeral_public_key");
+	}
+	return base64Decode(value);
+}
+
 describe("seal / unseal round trip", () => {
 	test("envelope carries kid, ephemeral key and nonce-prefixed ciphertext", () => {
 		const coord = fakeCoordinator();
 		const sealed = sealRawRequest(encodeUtf8('{"model":"gpt-oss-20b"}'), coord.key);
-		const env = JSON.parse(sealed.envelopeJson) as Record<string, string>;
+		const env = parseJsonObject(sealed.envelopeJson);
 		expect(env.kid).toBe("72190d50e78c876c");
-		expect(base64Decode(env.ephemeral_public_key!).length).toBe(nacl.box.publicKeyLength);
+		const ephemeralPublicKey = env.ephemeral_public_key;
+		const ciphertext = env.ciphertext;
+		if (typeof ephemeralPublicKey !== "string" || typeof ciphertext !== "string") {
+			throw new Error("sealed envelope fields are not strings");
+		}
+		expect(base64Decode(ephemeralPublicKey).length).toBe(nacl.box.publicKeyLength);
 		// 24-byte nonce prefix, then the box (which adds a 16-byte MAC).
-		expect(base64Decode(env.ciphertext!).length).toBeGreaterThan(nacl.box.nonceLength + 16);
+		expect(base64Decode(ciphertext).length).toBeGreaterThan(nacl.box.nonceLength + 16);
 		expect(coord.open(sealed.envelopeJson)).toBe('{"model":"gpt-oss-20b"}');
 	});
 
@@ -158,10 +180,7 @@ describe("createSealedFetch", () => {
 			sentContentType = headers.get("content-type") ?? "";
 			openedBody = coord.open(String(init?.body));
 			// The client's ephemeral pubkey is in the envelope it just sent.
-			const clientPub = base64Decode(
-				(JSON.parse(String(init?.body)) as { ephemeral_public_key: string })
-					.ephemeral_public_key,
-			);
+			const clientPub = clientPublicKeyFromEnvelope(String(init?.body));
 			const frames = [
 				`data: ${coord.seal('data: {"choices":[{"delta":{"content":"hi"}}]}', clientPub)}\n\n`,
 				"data: [DONE]\n\n",
@@ -222,5 +241,245 @@ describe("createSealedFetch", () => {
 				body: '{"a":1}',
 			}),
 		).rejects.toThrow(/refusing to send plaintext/);
+	});
+
+	test("hard-pins the sealed body to one provider serial", async () => {
+		const coord = fakeCoordinator();
+		const sePublicKey = base64Encode(new Uint8Array(64).fill(7));
+		let opened: Record<string, unknown> = {};
+		const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+			const target = String(typeof url === "string" ? url : (url as Request).url ?? url);
+			if (target.endsWith("/v1/encryption-key")) {
+				return new Response(
+					JSON.stringify({
+						kid: coord.key.kid,
+						public_key: base64Encode(coord.key.publicKey),
+						algorithm: "x25519-nacl-box",
+					}),
+					{ status: 200 },
+				);
+			}
+			opened = parseJsonObject(coord.open(String(init?.body)));
+			const clientPub = clientPublicKeyFromEnvelope(String(init?.body));
+			return new Response(
+				`data: ${coord.seal('data: {"choices":[{"delta":{"content":"MIN"}}]}', clientPub)}\n\n`,
+				{
+					status: 200,
+					headers: {
+						"Content-Type": "text/event-stream",
+						"X-Provider-Trust-Level": "hardware",
+						"X-Provider-Secure-Enclave": "true",
+						"X-Attestation-SE-Public-Key": sePublicKey,
+					},
+				},
+			);
+		}) as unknown as typeof fetch;
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: impl,
+			providerPin: { serial: "JYKJDQ7WW3", sePublicKey },
+		});
+		const response = await sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: '{"model":"gpt-oss-20b","stream":true}',
+		});
+		expect(opened.provider_serial).toBe("JYKJDQ7WW3");
+		expect(opened.provider_serials).toBeUndefined();
+		expect(opened.model).toBe("gpt-oss-20b");
+		expect(await response.text()).toContain('"content":"MIN"');
+	});
+
+	test("rejects provider routing fields supplied by the caller when a pin is configured", async () => {
+		const sePublicKey = base64Encode(new Uint8Array(64).fill(7));
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: (async () => {
+				throw new Error("network must not be reached");
+			}) as unknown as typeof fetch,
+			providerPin: { serial: "JYKJDQ7WW3", sePublicKey },
+		});
+		await expect(
+			sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+				method: "POST",
+				body: '{"model":"gpt-oss-20b","provider_serial":"OTHER"}',
+			}),
+		).rejects.toThrow(/routing fields/);
+	});
+
+	test("rejects a successful response from the wrong Secure Enclave key", async () => {
+		const coord = fakeCoordinator();
+		const expectedKey = base64Encode(new Uint8Array(64).fill(7));
+		const wrongKey = base64Encode(new Uint8Array(64).fill(8));
+		const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+			const target = String(typeof url === "string" ? url : (url as Request).url ?? url);
+			if (target.endsWith("/v1/encryption-key")) {
+				return new Response(
+					JSON.stringify({ kid: coord.key.kid, public_key: base64Encode(coord.key.publicKey) }),
+					{ status: 200 },
+				);
+			}
+			return new Response("ignored", {
+				status: 200,
+				headers: {
+					"Content-Type": "text/event-stream",
+					"X-Provider-Trust-Level": "hardware",
+					"X-Provider-Secure-Enclave": "true",
+					"X-Attestation-SE-Public-Key": wrongKey,
+				},
+			});
+		}) as unknown as typeof fetch;
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: impl,
+			providerPin: { serial: "JYKJDQ7WW3", sePublicKey: expectedKey },
+		});
+		await expect(
+			sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+				method: "POST",
+				body: '{"model":"gpt-oss-20b","stream":true}',
+			}),
+		).rejects.toThrow(/Secure Enclave key mismatch/);
+	});
+
+	test("rejects a pinned success without hardware identity headers", async () => {
+		const coord = fakeCoordinator();
+		const sePublicKey = base64Encode(new Uint8Array(64).fill(7));
+		const impl = (async (url: string | URL | Request) =>
+			String(url).endsWith("/v1/encryption-key")
+				? new Response(
+						JSON.stringify({ kid: coord.key.kid, public_key: base64Encode(coord.key.publicKey) }),
+						{ status: 200 },
+					)
+				: new Response("ignored", {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					})) as unknown as typeof fetch;
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: impl,
+			providerPin: { serial: "JYKJDQ7WW3", sePublicKey },
+		});
+		await expect(
+			sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+				method: "POST",
+				body: '{"model":"gpt-oss-20b","stream":true}',
+			}),
+		).rejects.toThrow(/hardware trust/);
+	});
+
+	test("rejects a plaintext buffered 2xx instead of silently downgrading", async () => {
+		const coord = fakeCoordinator();
+		const impl = (async (url: string | URL | Request) =>
+			String(url).endsWith("/v1/encryption-key")
+				? new Response(
+						JSON.stringify({ kid: coord.key.kid, public_key: base64Encode(coord.key.publicKey) }),
+						{ status: 200 },
+					)
+				: new Response('{"choices":[{"message":{"content":"PLAINTEXT"}}]}', {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					})) as unknown as typeof fetch;
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: impl,
+		});
+		await expect(
+			sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+				method: "POST",
+				body: '{"model":"gpt-oss-20b"}',
+			}),
+		).rejects.toThrow(/not valid sealed ciphertext/);
+	});
+
+	test("unseals a buffered successful response", async () => {
+		const coord = fakeCoordinator();
+		const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+			const target = String(typeof url === "string" ? url : (url as Request).url ?? url);
+			if (target.endsWith("/v1/encryption-key")) {
+				return new Response(
+					JSON.stringify({ kid: coord.key.kid, public_key: base64Encode(coord.key.publicKey) }),
+					{ status: 200 },
+				);
+			}
+			const clientPub = clientPublicKeyFromEnvelope(String(init?.body));
+			return new Response(
+				JSON.stringify({
+					kid: coord.key.kid,
+					ciphertext: coord.seal('{"choices":[{"message":{"content":"SEALED"}}]}', clientPub),
+				}),
+				{ status: 200, headers: { "Content-Type": SEALED_CONTENT_TYPE } },
+			);
+		}) as unknown as typeof fetch;
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: impl,
+		});
+		const response = await sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+			method: "POST",
+			body: '{"model":"gpt-oss-20b"}',
+		});
+		expect(await response.json()).toEqual({
+			choices: [{ message: { content: "SEALED" } }],
+		});
+	});
+
+	test("unseals a sealed non-2xx routing error", async () => {
+		const coord = fakeCoordinator();
+		const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+			const target = String(typeof url === "string" ? url : (url as Request).url ?? url);
+			if (target.endsWith("/v1/encryption-key")) {
+				return new Response(
+					JSON.stringify({ kid: coord.key.kid, public_key: base64Encode(coord.key.publicKey) }),
+					{ status: 200 },
+				);
+			}
+			const clientPub = clientPublicKeyFromEnvelope(String(init?.body));
+			return new Response(
+				JSON.stringify({
+					kid: coord.key.kid,
+					ciphertext: coord.seal(
+						'{"error":{"code":"rate_limit_exceeded","message":"pinned node is busy"}}',
+						clientPub,
+					),
+				}),
+				{ status: 429, headers: { "Content-Type": SEALED_CONTENT_TYPE } },
+			);
+		}) as unknown as typeof fetch;
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: impl,
+		});
+		const response = await sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+			method: "POST",
+			body: '{"model":"gpt-oss-20b"}',
+		});
+		expect(response.status).toBe(429);
+		expect(await response.json()).toEqual({
+			error: { code: "rate_limit_exceeded", message: "pinned node is busy" },
+		});
+	});
+
+	test("rejects a plaintext successful SSE frame on read", async () => {
+		const coord = fakeCoordinator();
+		const impl = (async (url: string | URL | Request) =>
+			String(url).endsWith("/v1/encryption-key")
+				? new Response(
+						JSON.stringify({ kid: coord.key.kid, public_key: base64Encode(coord.key.publicKey) }),
+						{ status: 200 },
+					)
+				: new Response('data: {"choices":[{"delta":{"content":"PLAINTEXT"}}]}\n\n', {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					})) as unknown as typeof fetch;
+		const sealedFetch = createSealedFetch({
+			baseUrl: "https://api.darkbloom.dev",
+			fetchImpl: impl,
+		});
+		const response = await sealedFetch("https://api.darkbloom.dev/v1/chat/completions", {
+			method: "POST",
+			body: '{"model":"gpt-oss-20b","stream":true}',
+		});
+		await expect(response.text()).rejects.toThrow();
 	});
 });

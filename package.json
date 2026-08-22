@@ -13,7 +13,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test test/*.test.ts",
+    "test": "bun test ./test",
     "smoke": "bun run scripts/smoke-sealed.ts",
     "link:omp": "bun run scripts/link-omp.ts",
     "postinstall": "bun run scripts/link-omp.ts"
