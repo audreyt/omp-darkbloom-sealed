@@ -2,12 +2,14 @@
   "name": "omp-darkbloom-sealed",
   "version": "0.1.0",
   "description": "omp extension: NaCl-sealed transport to the Darkbloom coordinator",
-  "license": "MIT",
+  "license": "CC0-1.0",
   "type": "module",
   "private": true,
   "packageManager": "bun@1.4.0",
   "omp": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
