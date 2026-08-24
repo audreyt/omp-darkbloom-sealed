@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en" data-language="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#faf8f3">
+  <meta name="description" content="A warm visual essay about how protected code can briefly open a coding prompt without exposing it to a person.">
+  <title>Opened by code, hidden from people</title>
+  <link rel="stylesheet" href="styles.css">
+  <script>document.documentElement.classList.add('js')</script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main"><span data-copy="en">Skip to the essay</span><span data-copy="zh">跳到文章</span></a>
+  <header class="masthead" aria-label="Site header">
+    <a class="wordmark" href="#top" aria-label="Back to the beginning"><span class="wordmark-flower" aria-hidden="true">✣</span><span><span data-copy="en">sealed between rooms</span><span data-copy="zh">密封穿梭兩室</span></span></a>
+    <div class="language-switch" role="group" aria-label="Language / 語言">
+      <button type="button" data-language-button="en" aria-pressed="true">English</button><span aria-hidden="true">·</span><button type="button" data-language-button="zh" aria-pressed="false" lang="zh-Hant">華文</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <article>
+      <section class="hero page-shell" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="opening-note"><span data-copy="en">A coding assistant may receive unfinished code, stubborn error messages, private filenames, or a secret left in a config file. The chat feels like one conversation. Behind it, your words cross several machines.</span><span data-copy="zh">程式助理收到的，可能是未完成的程式碼、難解的錯誤訊息、私密檔名，或留在設定檔裡的密鑰。眼前看來只是一場對話，背後的文字卻會穿過好幾台機器。</span></p>
+          <p class="kicker"><span data-copy="en">A small distinction with a large consequence</span><span data-copy="zh">一個細微、卻重要的分別</span></p>
+          <h1 id="hero-title"><span data-copy="en">Code can open your prompt.<br>No person along the way can see it.</span><span data-copy="zh"><span class="keep-word">程式碼</span>可以打開<span class="keep-word">提示詞</span>，<br>沿途卻<span class="keep-word">沒有人</span>能看得到。</span></h1>
+          <p class="hero-lede"><span data-copy="en"><strong><a class="omp-link" href="https://omp.sh">omp</a> is an open-source coding assistant that can use different AI services.</strong> This add-on carries the request body past the internet’s front desk in a sealed envelope. Later, only protected software on two locked-down machines opens it briefly; Darkbloom staff and machine owners cannot see it.</span><span data-copy="zh"><strong><a class="omp-link" href="https://omp.sh" lang="en">omp</a> 是一個開源程式助理，可以選用不同的 AI 服務。</strong>這個外掛讓請求內容以密封信封通過網路「櫃檯」。之後，只有兩台受保護機器裡的程式碼會短暫解封；Darkbloom 人員和機器擁有者都看不到內容。</span></p>
+        </div>
+
+        <figure class="letter-story">
+          <svg viewBox="0 0 980 500" role="img" aria-labelledby="letter-art-title letter-art-desc">
+            <title id="letter-art-title">HTTPS front desk versus a sealed request body</title>
+            <desc id="letter-art-desc">HTTPS protects both routes while they travel to the front desk. Ordinarily the desk receives a readable request body. The add-on keeps that body in a closed envelope beyond the desk.</desc>
+            <path class="travel-line travel-line-postcard" d="M188 146 C310 116 405 155 503 157" pathLength="1"/><path class="travel-line travel-line-letter" d="M190 350 C324 376 408 334 506 338" pathLength="1"/>
+            <g class="art-note"><rect x="55" y="71" width="150" height="112" rx="8"/><path d="M73 101h72M73 121h91M73 141h55"/><circle cx="177" cy="94" r="12"/></g>
+            <g class="art-envelope"><rect x="49" y="294" width="166" height="112" rx="9"/><path d="m54 307 78 61 78-61M54 395l54-52M210 395l-54-52"/><circle class="seal" cx="132" cy="367" r="17"/><path class="seal-mark" d="m124 367 6 6 12-15"/></g>
+            <g class="art-desk"><path d="M521 112h229l28 41v244H493V153z"/><path d="M493 153h285M547 397V227h177v170M583 227v-36h105v36"/><circle cx="635" cy="300" r="46"/><path d="M611 302c17 14 31 14 48 0M618 280h1M651 280h1"/></g>
+            <g class="art-eye eye-open"><path d="M823 139c29-26 69-26 98 0-29 27-69 27-98 0z"/><circle cx="872" cy="139" r="12"/></g>
+            <g class="art-eye eye-closed"><path d="M823 345c29 25 69 25 98 0M837 360l-10 13M855 367l-4 15M887 367l4 15M905 360l10 13"/></g>
+            <path class="small-arrow" d="m454 145 15 12-17 8M454 327l15 12-17 8"/>
+          </svg>
+          <figcaption>
+            <div><span class="story-key postcard-key" aria-hidden="true"></span><strong><span data-copy="en">Ordinary HTTPS</span><span data-copy="zh">一般 HTTPS</span></strong><span data-copy="en">The trip to the front desk is protected, but the request body is opened there.</span><span data-copy="zh">前往櫃檯的路程受到保護，但請求內容會在櫃檯打開。</span></div>
+            <div><span class="story-key letter-key" aria-hidden="true"></span><strong><span data-copy="en">The sealed add-on</span><span data-copy="zh">加上密封外掛</span></strong><span data-copy="en">The front desk passes ciphertext onward without seeing the prompt.</span><span data-copy="zh">櫃檯只轉交密文，看不到提示詞。</span></div>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="journey" aria-labelledby="journey-title">
+        <div class="page-shell">
+          <div class="section-intro essay-copy">
+            <p class="kicker"><span data-copy="en">What “no person can see” means</span><span data-copy="zh">「沒有人看得到」究竟是什麼意思</span></p>
+            <h2 id="journey-title"><span data-copy="en">Two machines do the work.<br>Every person stays outside.</span><span data-copy="zh">工作交給兩台機器，<br>內容卻沒有人能看得到。</span></h2>
+            <p><span data-copy="en">The first protected machine opens the envelope just long enough for software to choose a model and record the cost. Staff cannot watch, log, or keep what it says. The software seals it again for one model Mac. There, the verified Darkbloom app opens it only while the model works; the Mac owner cannot look inside. The answer is sealed before it leaves.</span><span data-copy="zh">第一台受保護的機器只讓程式碼短暫拆信，以選擇模型並記錄用量；工作人員無法查看、記錄或保留內容。程式碼隨即把信重新封給一台模型 Mac。到了那裡，通過驗證的 Darkbloom 應用程式只在模型運算時解封，Mac 擁有者無法看到；回答離開前也會先封好。</span></p>
+          </div>
+
+          <figure class="journey-figure">
+            <svg viewBox="0 0 1100 330" role="img" aria-labelledby="journey-art-title journey-art-desc">
+              <defs><marker id="journey-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="journey-arrowhead" d="M0 0l8 4-8 4z"/></marker></defs>
+              <title id="journey-art-title">A sealed prompt traveling between two protected rooms</title>
+              <desc id="journey-art-desc">Three separate paths each carry a sealed envelope. The internet front desk has no prompt view. Protected code briefly opens and reseals the prompt inside the coordinator room and the selected provider room, while people remain outside.</desc>
+              <path class="journey-path" d="M151 165 C206 133 256 133 309 165" pathLength="1" marker-end="url(#journey-arrow)"/>
+              <path class="journey-path" d="M475 165 C526 133 568 133 616 165" pathLength="1" marker-end="url(#journey-arrow)"/>
+              <path class="journey-path" d="M795 165 C840 133 880 133 928 165" pathLength="1" marker-end="url(#journey-arrow)"/>
+              <g class="hop-envelope envelope-one"><rect x="215" y="126" width="58" height="40" rx="5"/><path d="m219 132 25 20 25-20"/><circle cx="244" cy="151" r="7"/></g>
+              <g class="hop-envelope envelope-two"><rect x="527" y="126" width="58" height="40" rx="5"/><path d="m531 132 25 20 25-20"/><circle cx="556" cy="151" r="7"/></g>
+              <g class="hop-envelope envelope-three"><rect x="837" y="126" width="58" height="40" rx="5"/><path d="m841 132 25 20 25-20"/><circle cx="866" cy="151" r="7"/></g>
+              <g class="stop stop-editor"><rect x="43" y="104" width="112" height="86" rx="12"/><path d="M63 124h72v45H63zM80 190v18M118 190v18M70 208h59"/></g>
+              <g class="stop stop-desk"><path d="M309 116h166v96H309zM294 116h196l-22-32H318z"/><path d="M344 212v27M440 212v27M326 239h132"/><path class="no-view" d="m365 152 54 42m0-42-54 42"/></g>
+              <g class="protected-room stop-workroom"><path d="M615 224V102l90-39 90 39v122zM645 224v-78h120v78"/><path class="room-code" d="m670 170-16 14 16 14m69-28 16 14-16 14m-43 11 18-50"/><path class="shield-mark" d="M705 83c13 9 25 10 35 0v21c0 20-12 32-35 40-23-8-35-20-35-40V83c10 10 22 9 35 0z"/></g>
+              <g class="protected-room stop-mac"><rect x="928" y="89" width="127" height="102" rx="12"/><path d="M946 107h91v58h-91zM970 191l-8 27M1013 191l8 27M951 218h81"/><path class="room-code" d="m975 124-11 10 11 10m33-20 11 10-11 10m-21 4 10-28"/><path class="shield-mark" d="M991 67c10 7 19 8 27 0v16c0 15-9 24-27 30-18-6-27-15-27-30V67c8 8 17 7 27 0z"/></g>
+              <g class="person-outside"><circle cx="705" cy="278" r="10"/><path d="M705 288v24m-17-11h34"/><path class="no-view" d="m682 265 46 48"/></g>
+              <g class="person-outside"><circle cx="991" cy="278" r="10"/><path d="M991 288v24m-17-11h34"/><path class="no-view" d="m968 265 46 48"/></g>
+            </svg>
+            <figcaption>
+              <ol class="journey-stops">
+                <li><div><strong><span data-copy="en">Your editor</span><span data-copy="zh">你的編輯器</span></strong><span class="access-status status-you"><span data-copy="en">Visible to you</span><span data-copy="zh">由你查看</span></span><p><span data-copy="en">You see the request here, before sending.</span><span data-copy="zh">送出之前，只有你在這裡看得到。</span></p></div></li>
+                <li><div><strong><span data-copy="en">Internet front desk</span><span data-copy="zh">網路櫃檯</span></strong><span class="access-status status-no"><span data-copy="en">No human view</span><span data-copy="zh">沒有人看得到</span></span><p><span data-copy="en">It handles the connection, never the prompt inside.</span><span data-copy="zh">只處理連線，絕不接觸信封裡的提示詞。</span></p></div></li>
+                <li><div><strong><span data-copy="en">Darkbloom’s protected machine</span><span data-copy="zh">Darkbloom 的受保護機器</span></strong><span class="access-status status-protected"><span data-copy="en">Software opens briefly</span><span data-copy="zh">程式碼短暫解封</span></span><p><span data-copy="en">Staff cannot watch, log, or keep the prompt. It leaves resealed.</span><span data-copy="zh">人員無法查看、記錄或保留提示詞；離開前會重新密封。</span></p></div></li>
+                <li><div><strong><span data-copy="en">Verified model Mac</span><span data-copy="zh">通過驗證的模型 Mac</span></strong><span class="access-status status-protected"><span data-copy="en">Software opens briefly</span><span data-copy="zh">程式碼短暫解封</span></span><p><span data-copy="en">The app runs the model. Its owner cannot see the prompt. The answer leaves sealed.</span><span data-copy="zh">應用程式執行模型；擁有者看不到提示詞，回答也會密封離開。</span></p></div></li>
+              </ol>
+            </figcaption>
+          </figure>
+
+          <blockquote><p><span data-copy="en">For a few moments, software handles readable words inside protected memory. People do not. Everywhere between machines, the prompt is sealed.</span><span data-copy="zh">短短幾刻，程式碼在受保護的記憶體裡處理可讀內容；沒有人能看得到。機器與機器之間，提示詞始終密封。</span></p></blockquote>
+        </div>
+      </section>
+
+      <section class="choices page-shell" aria-labelledby="choices-title">
+        <div class="section-intro choices-intro essay-copy">
+          <p class="kicker"><span data-copy="en">One named destination</span><span data-copy="zh">指定一個確切終點</span></p>
+          <h2 id="choices-title"><span data-copy="en">You can choose the exact Mac that does the work.</span><span data-copy="zh">你可以指定：就由這一台 Mac 完成工作。</span></h2>
+          <p><span data-copy="en">Before Darkbloom sends a private prompt to any model Mac, it checks that the machine is genuine, its protections are intact, and the real Darkbloom app is running. If you contribute a Mac of your own, you may name that exact machine—and allow no substitute. Its owner still cannot see inside the protected app.</span><span data-copy="zh">Darkbloom 在把私密提示詞交給任何模型 Mac 之前，會先確認機器是真的、保護功能完整，而且正在執行正版應用程式。若你提供自己的 Mac，還可以指定就由這一台完成工作，不准換成其他機器。即使如此，Mac 擁有者仍看不到受保護應用程式裡的內容。</span></p>
+        </div>
+
+        <div class="choice-scenes">
+          <figure class="fleet-scene">
+            <svg viewBox="0 0 660 350" aria-hidden="true" focusable="false">
+              <path class="shelf" d="M42 284h576"/>
+              <g class="little-mac mac-one"><rect x="69" y="110" width="139" height="106" rx="12"/><path d="M86 129h105v65H86zM114 216l-9 42M163 216l9 42M92 258h94"/><circle cx="139" cy="162" r="7"/></g>
+              <g class="little-mac chosen-mac"><rect x="260" y="73" width="158" height="121" rx="13"/><path d="M280 94h118v74H280zM312 194l-10 53M367 194l10 53M287 247h104"/><path class="heart" d="M339 119c13 9 25 10 35 0v21c0 20-12 32-35 40-23-8-35-20-35-40v-21c10 10 22 9 35 0z"/><path class="shield-check" d="m326 148 9 9 19-23"/><circle class="chosen-ring" cx="339" cy="153" r="105"/></g>
+              <g class="little-mac mac-three"><rect x="470" y="123" width="125" height="95" rx="11"/><path d="M486 140h93v57h-93zM510 218l-8 40M554 218l8 40M490 258h84"/><circle cx="532" cy="168" r="6"/></g>
+              <path class="choice-arrow" d="M339 16v36m-12-12 12 12 12-12"/>
+            </svg>
+            <figcaption><strong><span data-copy="en">One verified Mac. No substitute.</span><span data-copy="zh">只用這台通過驗證的 Mac，不換別台。</span></strong><span data-copy="en">Darkbloom checks the machine and app before delivery. Even its owner cannot see the prompt.</span><span data-copy="zh">送出前會先核對機器與應用程式；就連擁有者也看不到提示詞。</span></figcaption>
+          </figure>
+
+          <figure class="gate-scene">
+            <svg viewBox="0 0 520 350" aria-hidden="true" focusable="false">
+              <path class="ground" d="M30 291h460"/><path class="gate-post" d="M109 291V82h38v209M373 291V82h38v209"/><path class="gate-door" d="M147 118h226v173H147zM260 118v173M147 156h226M147 214h226"/>
+              <g class="stopped-letter"><rect x="36" y="169" width="78" height="55" rx="6"/><path d="m40 176 35 27 35-27"/></g><path class="stop-line" d="M125 151 90 116M90 151l35-35"/><path class="wind-line" d="M24 246c34-16 55-7 78 0M42 265c21-9 35-5 50 0"/>
+            </svg>
+            <figcaption><strong><span data-copy="en">If one check fails, this request stops.</span><span data-copy="zh">只要一項檢查失敗，這次請求就停止。</span></strong><span data-copy="en">It does not switch to another Mac or continue without the sealed route.</span><span data-copy="zh">不會換一台 Mac，也不會改走未密封的路。</span></figcaption>
+          </figure>
+        </div>
+
+        <div class="essay-ending">
+          <p><span data-copy="en">The promise is not that software never opens the prompt—the model could not help if it did not. The promise is that software uses readable words only inside two protected machines while every person stays out. The prompt arrives sealed, leaves sealed, is never logged or kept, and cannot be seen by the people operating the route.</span><span data-copy="zh">這項承諾，不是程式碼永遠不打開提示詞——若真如此，模型也無法幫忙。承諾在於：可讀內容只在兩台受保護的機器裡交給程式碼處理，任何人都在外面，誰也看不到。提示詞密封抵達、密封離開，不寫入日誌，也不在工作結束後保留。</span></p>
+        </div>
+      </section>
+
+      <aside class="endnotes" aria-label="Technical endnotes and repository colophon">
+        <div class="page-shell">
+          <details class="curious">
+            <summary><span data-copy="en">For the curious: exact protocol and evidence</span><span data-copy="zh">想知道技術細節：協定與證據的完整說明</span></summary>
+            <div class="curious-content">
+              <div><h3><span data-copy="en">What stays sealed in transit</span><span data-copy="zh">傳輸途中密封哪些內容</span></h3><p><span data-copy="en">Standard TLS protects the trip to a reverse-proxy front desk, where TLS ordinarily ends. This add-on goes further: every POST body is NaCl Box sealed before that desk, with a fresh ephemeral X25519 keypair for each request. Between every machine and every hop, the prompt is ciphertext. Successful buffered and SSE responses return as encrypted chunks through omp’s native tool-call path. GET model discovery is unsealed because it carries no prompt body.</span><span data-copy="zh">標準 TLS 會保護前往反向代理「櫃檯」的路程，而 TLS 通常在那裡終止。這個外掛再多走一步：每筆 POST 內容都在抵達櫃檯前，以每次請求新建的臨時 X25519 金鑰組透過 NaCl Box 密封。提示詞在每台機器、每一段路之間都是密文。成功的整批回應與 SSE 回應都以加密片段，經 omp 原生工具呼叫流程返回。GET 模型探索不帶提示詞內容，因此不密封。</span></p></div>
+              <div><h3><span data-copy="en">Where protected code opens it</span><span data-copy="zh">受保護的程式碼在哪裡解封</span></h3><p><span data-copy="en">Darkbloom’s coordinator opens the request transiently only inside Confidential VM memory so code can route and bill it, then NaCl-seals it anew to the selected provider’s attested X25519 key. The provider opens it only inside the genuine hardened Darkbloom app to run the model, then seals response chunks back. “Opened by protected code” does not mean “exposed to a person”: staff, provider owners, and operators have no prompt view.</span><span data-copy="zh">Darkbloom 協調器只會在機密虛擬機的記憶體裡短暫解封，讓程式碼完成路由與計費，隨即以 NaCl 重新密封給獲選供應端通過證明的 X25519 金鑰。供應端只會在正版、強化過的 Darkbloom 應用程式內解封以執行模型，再把回答逐段封回。「由受保護的程式碼解封」不等於「攤給人看」：Darkbloom 人員、供應端擁有者與操作人員都看不到提示詞。</span></p></div>
+              <div><h3><span data-copy="en">What the boundary forbids</span><span data-copy="zh">這道界線禁止什麼</span></h3><p><span data-copy="en">Prompt content is never logged, exposed to observability, forwarded to an outside service, or retained after the request. It may not be handed to a subprocess or interpreter that escapes the protected runtime. Private routing requires encrypted response chunks, a registered key, verified SIP, Secure Boot and runtime state, hardware or Secure Enclave attestation, and genuine-app code identity.</span><span data-copy="zh">提示詞內容不得寫入日誌、出現在監測系統、轉送到外部服務，也不得在請求結束後保留；更不能交給會逃出受保護執行環境的子程序或直譯器。私密路由要求回答逐段加密、金鑰已登記、SIP、Secure Boot 與執行狀態通過驗證、硬體或 Secure Enclave 證明有效，且程式碼身分確屬正版應用程式。</span></p></div>
+              <div><h3><span data-copy="en">Pinning and failure</span><span data-copy="zh">釘選與關閉失敗</span></h3><p><span data-copy="en">Optional hard pinning selects one exact owned Mac and key; it does not give that Mac’s owner a view. Missing keys, tampering, plaintext successful POST responses, failed platform or code-identity checks, and hard-pin mismatches all fail closed. There is no plaintext fallback and no quiet rerouting to an unverified provider.</span><span data-copy="zh">可選的硬釘選會指定一台你擁有的 Mac 與一把確切金鑰，卻不會讓 Mac 擁有者看到內容。金鑰缺失、內容遭竄改、POST 成功回應卻是明文、平台或程式身分檢查失敗，以及硬釘選不符時，都會關閉失敗；沒有明文備援，也不會悄悄改送未驗證的供應端。</span></p></div>
+            </div>
+          </details>
+
+          <div class="colophon" id="install">
+            <div class="colophon-copy"><p class="kicker"><span data-copy="en">Repository colophon</span><span data-copy="zh">專案附記</span></p><p><span data-copy="en">The case study above is <strong>omp-darkbloom-sealed</strong>. Its source, tests, and setup remain open for inspection.</span><span data-copy="zh">本文的實例是 <strong>omp-darkbloom-sealed</strong>；原始碼、測試與安裝方式都可以公開檢視。</span></p><a class="source-link" href="https://github.com/audreyt/omp-darkbloom-sealed"><span data-copy="en">Open the repository</span><span data-copy="zh">開啟專案原始碼</span><span aria-hidden="true">↗</span></a></div>
+            <div class="command-wrap"><div class="command-heading"><span data-copy="en">Setup, from source</span><span data-copy="zh">從原始碼安裝</span></div><pre id="install-command"><code>git clone https://github.com/audreyt/omp-darkbloom-sealed.git &amp;&amp; cd omp-darkbloom-sealed
+vp install
+vp run link:omp
+ln -s "$PWD" ~/.omp/agent/extensions/omp-darkbloom-sealed
+omp models refresh</code></pre><button class="copy-button" type="button" data-copy-command aria-describedby="copy-status"><span data-copy="en">Copy</span><span data-copy="zh">複製</span></button><p class="copy-status" id="copy-status" role="status" aria-live="polite"></p></div>
+          </div>
+        </div>
+      </aside>
+    </article>
+  </main>
+
+  <footer class="footer page-shell"><p>omp-darkbloom-sealed</p><p><span data-copy="en">Opened by protected code. Hidden from people.</span><span data-copy="zh">由受保護的程式碼解封，沒有人能看得到。</span></p></footer>
+</body>
+</html>

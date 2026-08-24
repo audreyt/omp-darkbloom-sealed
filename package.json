@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test ./test",
     "smoke": "bun run scripts/smoke-sealed.ts",
+    "site": "bun run scripts/serve-site.ts",
     "link:omp": "bun run scripts/link-omp.ts",
     "postinstall": "bun run scripts/link-omp.ts"
   },
